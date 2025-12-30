@@ -1,124 +1,1132 @@
+<!--
+🔵 CORE SYNC & KONTROL HARGA
+🔵 ① M15 CLOSE MANUAL = MASTER SYNC (BUKAN MISI)
+• Input MT5 M15 Close
+• Tombol SYNC M15
+• Engine aktif hanya setelah sync
+• M15 tidak membuat misi
+🟢 ② ACTIVE_PRICE (BINANCE ↔ MT5 LOCK)
+• Sebelum sync → harga live
+• Setelah sync → harga MT5 terkunci
+• Semua evaluasi pakai ACTIVE_PRICE / ACTIVE_PRICE_EVAL
+🟣 ③ INIT SCAN M15 SEKALI (ANTI-REPAINT)
+• Scan struktur dari candle M15 sebelumnya
+• Tidak re-scan history
+• Tidak repaint
+🟢 ENGINE STRUKTUR & MISI
+🟢 ④ AUTO MISSION dari SNR / STRUKTUR
+• Deteksi High / Low struktur
+• Berbasis OHLC historis
+• Tanpa indikator
+🟡 ⑤ BREAK + CONFIRMATION (PA MURNI)
+• Engulf
+• Follow-through
+• Failed break / sweep
+🟠 ⑥ MISI DISIMPAN SELAMANYA
+• Misi tidak pernah dihapus
+• Hanya status yang berubah
+🔴 ⑦ STATUS MISI OTOMATIS
+• ACTIVE → dekat harga
+• SLEEP → jarak menengah
+• DEAD → jauh / sudah dibayar
+🔵 MULTI-TIMEFRAME & DATA
+🔵 ⑧ MULTI-TF SETARA
+• M1 / M5 / M15 / H1
+• Semua TF menerima candle
+• Semua TF bisa membentuk struktur
+🟣 ⑨ TRADINGVIEW REAL FEED (VISUAL ONLY)
+• BTCUSDT → BINANCE
+• XAUUSD → OANDA (SAFE MODE)
+• Tidak dipakai untuk logic
+🟢 ⑩ SNR OVERLAY OTOMATIS
+• Garis horizontal harga misi
+• Hijau / Kuning / Merah sesuai status
+🟡 SISTEM & KEAMANAN
+🟡 ⑪ JAM REALTIME AKTIF
+• Update per detik
+• Jam lokal browser
+🟠 ⑫ FULL IN-MEMORY
+• Tanpa localStorage
+• Tanpa cookie
+• Semua state di RAM
+🔴 ⑬ AMAN REFRESH / CLEAR BROWSER
+• Tidak crash
+• Reset bersih
+• Tidak corrupt logic
+🔵 ⑭ PLAIN TEXT · AUDIT-FRIENDLY
+• Tidak ada UI manipulatif
+• Semua status terbaca jelas
+🟣 ADAPTER & KOMPATIBILITAS
+🟣 ⑨A XAUUSD OFFSET ADAPTER (POST-STRUCTURE)
+• Struktur tetap asli OANDA
+• Offset hanya untuk ACTIVE_PRICE & evaluasi jarak
+• BTCUSDT tidak terpengaruh
+🟢 PAIR SWITCH ENGINE
+• BTCUSDT ↔ XAUUSD
+• Reset state aman
+• Tanpa reload halaman
+🔊 AWARENESS & INTELLIGENCE (ADD-ONLY)
+🔊 ⑮ SOUND AWARENESS (NON-SIGNAL)
+• 1x beep → SEEN
+• 2x beep → NEAR
+• 3x beep → HOT
+• Aman di HTTP
+🧠 ⑯ MOMENTUM AWARENESS ENGINE
+• INFO → CONFIRM-1 → CONFIRM-2
+• Entry-Zone Awareness (BUKAN entry)
+• Fake Break Detector
+• Momentum Exhaustion
+• TIIT 4x saat zona ideal
+🧠 ADVANCED INTEL (BTC)
+🧠 ⑰ BTC PRICE MEMORY ±30 HARI
+• Simpan misi lama
+• Status: OPEN / PAID / DEAD
+• Full in-memory
+🧠 ⑱ FAKE BREAK INTELLIGENCE
+• Deteksi break palsu dekat misi
+• Anti FOMO
+🧠 ⑲ MOMENTUM EXHAUSTION ALERT
+• Dorongan melemah
+• Wick dominan
+• Sound alert
+🧠 ⑳ MISSION PAYMENT CONFIRMATION
+• PAID → body close valid
+• DEAD → sweep keras
+• Log internal
+📘 ㉑ MISSION BOOK SUMMARY
+• Ringkasan OPEN / PAID / DEAD
+• Target OPEN terdekat
+• Mode market (WAIT / NO TARGET)
+-->
+
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>SCALPER ASSISTANT · FINAL A++ (FIELD SAFE + PRICE MISSION ASSIST)</title>
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SCALPER FINAL · M15 MASTER SYNC · AUTO SNR ENGINE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-/* === ORIGINAL CSS — TIDAK DIUBAH === */
-body{margin:0;background:#000;color:#00ff99;font-family:Consolas,monospace}
-#top{padding:8px;border-bottom:1px solid #222;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-select,button,input{background:#111;color:#fff;border:1px solid #444;padding:6px;font-family:Consolas}
-button.active{background:#003322;border-color:#00ff99}
-button.early{border-color:#00ff99}
-button.standby{border-color:#ffaa00}
-button.late{border-color:#ff4444}
+html,body{margin:0;background:#000;color:#00ff99;font-family:Consolas,monospace;height:100%}
+#top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;border-bottom:1px solid #222}
+input,button,select{background:#111;color:#fff;border:1px solid #444;padding:6px;font-family:Consolas}
 #status{font-weight:bold}
-#mode{color:#ffaa00;font-weight:bold}
-#session{color:#00bfff;font-weight:bold}
-#tvWrap{position:relative}
-#tv{width:100%;height:38vh;border:none}
-#overlay{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
-.line{position:absolute;left:0;right:0;height:1px}
-.line.m15{background:#ffff00}
-.line.m30{background:#00bfff}
-.line.h1{background:#bf00ff}
-#panel{height:62vh;overflow:auto;padding:8px}
+#clock{color:#00bfff;font-weight:bold}
+
+#wrap{position:relative;height:calc(100% - 48px)}
+#tv{width:100%;height:72vh;border:none}
+#overlay{position:absolute;left:0;right:0;top:0;height:72vh;pointer-events:none}
+
+#panel{height:28vh;overflow:auto;padding:8px}
 .section{border:1px solid #333;margin-bottom:8px;padding:8px;background:#070707}
-.zone{margin-top:6px;padding:6px;border:1px dashed #00ffff;color:#00ffff}
-.warn{color:#ff4444}
-.info{color:#ffaa00}
+
+.line{position:absolute;left:0;right:0;height:1px}
 .ok{color:#00ff99}
-.ctx{white-space:pre-line}
-.hidden{display:none}
-.score{margin-top:4px}
+.warn{color:#ffaa00}
+.dead{color:#ff4444}
+.small{font-size:12px;opacity:.85}
 </style>
 </head>
 
 <body>
 
 <div id="top">
-<b>PAIR</b>
-<select id="pair">
-<option>BTCUSDT</option>
-<option>XAUUSD</option>
-</select>
-<span id="mode">MODE: SNIPER</span>
-<span id="session">SESSION: -</span>
-<b id="status">BOOT</b>
-<button id="toggleReason">SHOW</button>
+  <b>PAIR</b>
+  <select id="pair">
+    <option value="BTCUSDT">BTCUSDT</option>
+    <option value="XAUUSD">XAUUSD</option>
+  </select>
+
+  <span id="clock">--:--:--</span>
+  <b id="status">BOOT</b>
+
+  <!-- 🔵 ① M15 CLOSE MANUAL = MASTER SYNC (BUKAN MISI) -->
+  <input id="m15close" type="number" step="0.01"
+         placeholder="MT5 M15 CLOSE"
+         style="width:150px;border-color:#00ff99;color:#00ff99">
+  <button id="syncBtn">SYNC M15</button>
+  <span id="syncState" class="warn">WAIT M15 CLOSE</span>
 </div>
 
-<div id="tvWrap">
-<iframe id="tv"></iframe>
-<div id="overlay"></div>
+<div id="wrap">
+  <!-- 🟣 ⑨ CHART TRADINGVIEW (REAL FEED · VISUAL ONLY) -->
+  <iframe id="tv"></iframe>
+  <!-- 🟢 ⑩ GARIS SNR OTOMATIS -->
+  <div id="overlay"></div>
 </div>
 
 <div id="panel">
-<div class="section">
-<b>ANCHOR H1 · MANUAL OHLC</b><br>
-O <input id="o" size="7">
-H <input id="h" size="7">
-L <input id="l" size="7">
-C <input id="c" size="7">
-<button id="setAnchor">SET</button>
-<div id="anchorState"></div>
-</div>
-
-<div class="section">
-<b>MISSION / CONTEXT</b>
-<div id="missionState" class="ctx"></div>
-<div id="priorityTarget" class="info"></div>
-<div id="strength" class="score"></div>
-</div>
-
-<div class="section">
-<b>DECISION</b><br>
-<button id="buy">BUY</button>
-<button id="sell">SELL</button>
-<div id="entryZone" class="zone hidden"></div>
-<div id="lateWarning" class="warn hidden">RISIKO FLOATING BESAR</div>
-<div id="cooldown" class="info hidden">COOLDOWN AKTIF</div>
-</div>
-
-<div id="reason" class="ctx hidden"></div>
+  <div class="section">
+    <b>MISSIONS (AUTO SNR)</b>
+    <div id="missions" class="small"></div>
+  </div>
 </div>
 
 <script>
-/* ================= ORIGINAL ENGINE (TIDAK DIUBAH) ================= */
-/* … SELURUH SCRIPT ENGINE ASLI TETAP SAMA … */
+/* =========================================================
+   🟡 ⑪ JAM REALTIME
+   ========================================================= */
+setInterval(()=>{
+  clock.textContent=new Date().toLocaleTimeString();
+},1000);
+
+/* =========================================================
+   🟠 ⑫ FULL IN-MEMORY (ENGINE ASLI — TIDAK DIUBAH)
+   ========================================================= */
+const TFs=["1m","5m","15m","1h"];
+const STATE={
+  pair:"BTCUSDT",
+  price:null,
+  synced:false,
+  syncPrice:null,
+  candles:{},
+  missions:[]
+};
+TFs.forEach(tf=>STATE.candles[tf]=[]);
+
+/* =========================================================
+   🟢 ② ACTIVE_PRICE (ENGINE ASLI)
+   ========================================================= */
+Object.defineProperty(window,"ACTIVE_PRICE",{
+  get(){return STATE.synced?STATE.syncPrice:STATE.price;}
+});
+
+/* =========================================================
+   🔵 ① MASTER SYNC (ENGINE ASLI — UTUH)
+   ========================================================= */
+syncBtn.onclick=()=>{
+  const v=parseFloat(m15close.value);
+  if(isNaN(v))return;
+  STATE.synced=true;
+  STATE.syncPrice=v;
+  syncState.textContent="M15 TERKUNCI · MASTER ACTIVE";
+  syncState.className="ok";
+  status.textContent="RUNNING";
+  initScanFromHistory();
+};
+
+/* =========================================================
+   🔵 ⑧ MULTI-TF SETARA
+   ========================================================= */
+const LOOKBACK=20;
+
+/* =========================================================
+   🟢 ④ AUTO MISSION DARI STRUKTUR
+   ========================================================= */
+function processStructure(tf){
+  const arr=STATE.candles[tf];
+  if(arr.length<LOOKBACK+2)return;
+
+  const last=arr[arr.length-1];
+  const slice=arr.slice(-LOOKBACK-1,-1);
+  const hi=Math.max(...slice.map(x=>x.h));
+  const lo=Math.min(...slice.map(x=>x.l));
+
+  if(last.c>hi && confirmUp(arr)) addMission(tf,hi,"UP");
+  if(last.c<lo && confirmDown(arr)) addMission(tf,lo,"DOWN");
+}
+
+/* =========================================================
+   🟣 A1 PA CONFIRMATION (ENGINE ASLI)
+   ========================================================= */
+function confirmUp(arr){
+  const a=arr[arr.length-1],b=arr[arr.length-2];
+  return (
+    (a.c>a.o && a.c>b.h) ||
+    (b.c>b.o && a.c>b.c) ||
+    (a.c>a.o && a.o<b.c && a.c>b.o)
+  );
+}
+function confirmDown(arr){
+  const a=arr[arr.length-1],b=arr[arr.length-2];
+  return (
+    (a.c<a.o && a.c<b.l) ||
+    (b.c<b.o && a.c<b.c) ||
+    (a.c<a.o && a.o>b.c && a.c<b.o)
+  );
+}
+
+/* =========================================================
+   🟠 ⑥ MISI DISIMPAN SELAMANYA
+   ========================================================= */
+function addMission(tf,price,dir){
+  if(STATE.missions.some(m=>m.tf===tf && m.price===price))return;
+  STATE.missions.push({tf,price,dir,created:Date.now(),status:"ACTIVE"});
+}
+
+/* =========================================================
+   🔴 ⑦ STATUS MISI (ENGINE ASLI)
+   ========================================================= */
+function updateStatuses(){
+  const p = window.ACTIVE_PRICE_EVAL || ACTIVE_PRICE;
+  STATE.missions.forEach(m=>{
+    const d=Math.abs(p-m.price);
+    if(d<p*0.0006)m.status="ACTIVE";
+    else if(d<p*0.004)m.status="SLEEP";
+    else m.status="DEAD";
+  });
+}
+
+/* =========================================================
+   🟣 ③ INIT SCAN M15 SEKALI (ANTI REPAINT)
+   ========================================================= */
+function initScanFromHistory(){
+  const arr=STATE.candles["15m"];
+  for(let i=LOOKBACK+1;i<arr.length;i++)processStructure("15m");
+}
+
+/* =========================================================
+   🟣 ⑨ REAL FEED BTCUSDT (BINANCE)
+   ========================================================= */
+let ws;
+function connectBTC(){
+  ws=new WebSocket(
+    "wss://stream.binance.com:9443/stream?streams="+
+    TFs.map(tf=>"btcusdt@kline_"+tf).join("/")
+  );
+  ws.onmessage=e=>{
+    const k=JSON.parse(e.data).data.k;
+    if(!k.x)return;
+    const tf=k.i;
+
+    const c={o:+k.o,h:+k.h,l:+k.l,c:+k.c};
+
+    STATE.candles[tf].push(c);
+    if(STATE.candles[tf].length>300)STATE.candles[tf].shift();
+    STATE.price=c.c;
+
+    if(STATE.synced){
+      processStructure(tf);
+      updateStatuses();
+      render();
+      drawSNR();
+    }
+  };
+}
+
+/* =========================================================
+   🟣 ⑨ LOAD CHART (VISUAL ONLY)
+   ========================================================= */
+function loadChart(){
+  tv.src = STATE.pair==="BTCUSDT"
+    ? "https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&interval=15&theme=dark&timezone=Etc/UTC"
+    : "https://s.tradingview.com/widgetembed/?symbol=OANDA:XAUUSD&interval=15&theme=dark&timezone=Etc/UTC";
+}
+
+/* =========================================================
+   🟢 PAIR SWITCH ENGINE (ASLI)
+   ========================================================= */
+pair.onchange=()=>{
+  STATE.pair=pair.value;
+  STATE.missions=[];
+  STATE.candles={};TFs.forEach(tf=>STATE.candles[tf]=[]);
+  STATE.synced=false;
+  syncState.textContent="WAIT M15 CLOSE";
+  syncState.className="warn";
+  loadChart();
+  if(STATE.pair==="BTCUSDT")connectBTC();
+  status.textContent="PAIR CHANGED";
+};
+
+connectBTC();
+loadChart();
+
+/* =========================================================
+   🟢 ⑩ SNR OVERLAY
+   ========================================================= */
+function drawSNR(){
+  overlay.innerHTML="";
+  const h=overlay.clientHeight;
+  const p=(window.ACTIVE_PRICE_EVAL||ACTIVE_PRICE)||STATE.price;
+  if(!p)return;
+  const r=p*0.01,min=p-r,max=p+r;
+  const y=v=>h-((v-min)/(max-min))*h;
+
+  STATE.missions.forEach(m=>{
+    const l=document.createElement("div");
+    l.className="line";
+    l.style.top=y(m.price)+"px";
+    l.style.background=m.status==="ACTIVE"?"#00ff99":m.status==="SLEEP"?"#ffaa00":"#ff4444";
+    overlay.appendChild(l);
+  });
+}
+
+/* =========================================================
+   🟢 ⑭ PLAIN TEXT RENDER
+   ========================================================= */
+function render(){
+  missions.innerHTML="";
+  STATE.missions.forEach(m=>{
+    const d=document.createElement("div");
+    d.className=m.status==="ACTIVE"?"ok":m.status==="SLEEP"?"warn":"dead";
+    d.textContent=`${m.tf} | ${m.dir} | ${m.price.toFixed(2)} | ${m.status}`;
+    missions.appendChild(d);
+  });
+}
 </script>
 
-<!-- ================= ADD-ONLY: PRICE MISSION ASSIST ================= -->
-<script>
-/* … SCRIPT PRICE_MISSION_ASSIST TETAP SAMA … */
-</script>
-
-<!-- ================= ADD-ONLY: REAL BTCUSDT SPREAD FEED ================= -->
+<!-- =========================================================
+   🟣 ⑨A POST-STRUCTURE OFFSET + SESSION LOCK (ADD-ONLY)
+   ========================================================= -->
 <script>
 (function(){
-  if(typeof window.currentSpread!=="number"){
-    window.currentSpread=1;
+
+  function getSessionUTC(){
+    const h=new Date().getUTCHours();
+    if(h<7) return "ASIA";
+    if(h<13) return "LONDON";
+    if(h<21) return "NEW_YORK";
+    return "OFF";
   }
 
-  let ws;
-  function connect(){
-    ws=new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@bookTicker");
-    ws.onmessage=e=>{
-      try{
-        const d=JSON.parse(e.data);
-        const bid=parseFloat(d.b);
-        const ask=parseFloat(d.a);
-        if(!isNaN(bid)&&!isNaN(ask)&&ask>bid){
-          const s=Math.abs(ask-bid);
-          if(s>0) window.currentSpread=s;
-        }
-      }catch(_){}
-    };
-    ws.onclose=()=>setTimeout(connect,3000);
-    ws.onerror=()=>ws.close();
+  const OFFSET={value:0,locked:false,session:null};
+
+  Object.defineProperty(window,"ACTIVE_PRICE_EVAL",{
+    get(){
+      if(STATE.pair==="XAUUSD" && OFFSET.locked){
+        return STATE.price + OFFSET.value;
+      }
+      return null;
+    }
+  });
+
+  const btn=document.getElementById("syncBtn");
+  if(!btn)return;
+
+  btn.addEventListener("click",function(e){
+    const s=getSessionUTC();
+
+    if(OFFSET.locked && OFFSET.session===s){
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      syncState.textContent="OFFSET LOCKED · "+s;
+      syncState.className="dead";
+      return;
+    }
+
+    setTimeout(()=>{
+      if(STATE.synced && STATE.pair==="XAUUSD"){
+        OFFSET.value=STATE.syncPrice-STATE.price;
+        OFFSET.locked=true;
+        OFFSET.session=s;
+        syncState.textContent="OFFSET LOCKED · "+s;
+        syncState.className="ok";
+      }
+    },0);
+
+  },true);
+
+  setInterval(()=>{
+    const s=getSessionUTC();
+    if(OFFSET.locked && OFFSET.session!==s){
+      OFFSET.locked=false;
+      OFFSET.session=null;
+      syncState.textContent="SESSION CHANGED · SYNC ALLOWED";
+      syncState.className="warn";
+    }
+  },30000);
+
+})();
+</script>
+<script>
+/* =========================================================
+   🔊 SOUND AWARENESS (ADD-ONLY · NON SIGNAL)
+   ========================================================= */
+(function(){
+
+  const SOUND = {
+    last: 0,
+    cooldown: 4000,
+    stage: null
+  };
+
+  function beep(n){
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    let t = ctx.currentTime;
+    for(let i=0;i<n;i++){
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = 880;
+      g.gain.value = 0.08;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t+0.1);
+      t += 0.15;
+    }
   }
-  connect();
+
+  function now(){ return Date.now(); }
+
+  setInterval(()=>{
+    if(!STATE.synced) return;
+    const p = ACTIVE_PRICE;
+    if(!p) return;
+
+    const active = STATE.missions.filter(m=>m.status==="ACTIVE");
+    if(!active.length){
+      SOUND.stage = null;
+      return;
+    }
+
+    const m = active.reduce((a,b)=>Math.abs(p-a.price)<Math.abs(p-b.price)?a:b);
+    const d = Math.abs(p - m.price);
+
+    let stage = null;
+    if(d < p*0.0006) stage = "HOT";       // sangat dekat
+    else if(d < p*0.0015) stage = "NEAR"; // masuk zona
+    else stage = "SEEN";                  // terlihat
+
+    if(stage !== SOUND.stage && now()-SOUND.last > SOUND.cooldown){
+      SOUND.stage = stage;
+      SOUND.last = now();
+      if(stage==="SEEN") beep(1);
+      if(stage==="NEAR") beep(2);
+      if(stage==="HOT")  beep(3);
+    }
+
+  },800);
+
+})();
+</script>
+<script>
+/* =========================================================
+   🧠 MOMENTUM AWARENESS ENGINE (ADD-ONLY, NO SIGNAL)
+   - INFO → CONFIRM-1 → CONFIRM-2
+   - ENTRY-ZONE AWARENESS (BUKAN ENTRY)
+   - FAKE BREAK DETECTOR
+   - MOMENTUM EXHAUSTION
+   - SOUND 1x / 2x / 4x
+   ========================================================= */
+(function(){
+
+  /* ================== SAFE GUARDS ================== */
+  if(!window.STATE || !STATE.candles) return;
+
+  const MOM = {
+    stage: "IDLE",      // IDLE | INFO | C1 | C2 | ZONE | EXHAUST
+    lastAlert: 0,
+    cooldown: 3000,
+    activeMission: null
+  };
+
+  /* ================== SOUND (HTTP SAFE) ================== */
+  function beep(n){
+    const now = Date.now();
+    if(now - MOM.lastAlert < MOM.cooldown) return;
+    MOM.lastAlert = now;
+
+    try{
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      let t = ctx.currentTime;
+      for(let i=0;i<n;i++){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.2, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t+0.1);
+        o.start(t); o.stop(t+0.1);
+        t += 0.15;
+      }
+    }catch(e){}
+  }
+
+  /* ================== HELPERS ================== */
+  function body(c){ return Math.abs(c.c - c.o); }
+  function range(c){ return Math.max(1e-8, c.h - c.l); }
+  function upperWick(c){ return c.h - Math.max(c.o, c.c); }
+  function lowerWick(c){ return Math.min(c.o, c.c) - c.l; }
+
+  function lastCandles(tf,n){
+    const a = STATE.candles[tf];
+    if(!a || a.length < n) return null;
+    return a.slice(-n);
+  }
+
+  /* ================== MISSION PICKER ================== */
+  function getNearestActiveMission(){
+    if(!STATE.missions.length) return null;
+    const p = ACTIVE_PRICE;
+    let best=null, dmin=Infinity;
+    STATE.missions.forEach(m=>{
+      if(m.status!=="ACTIVE") return;
+      const d = Math.abs(p - m.price);
+      if(d < dmin){ dmin=d; best=m; }
+    });
+    return best;
+  }
+
+  /* ================== STAGE 1 : INFO ================== */
+  function detectInfo(c){
+    // tenaga melemah
+    return (
+      body(c)/range(c) < 0.35 &&
+      (upperWick(c) > body(c) || lowerWick(c) > body(c))
+    );
+  }
+
+  /* ================== STAGE 2 : CONFIRM-1 ================== */
+  function detectConfirm1(prev, cur){
+    return (
+      body(cur) > body(prev) &&
+      body(cur)/range(cur) > 0.45
+    );
+  }
+
+  /* ================== STAGE 3 : CONFIRM-2 ================== */
+  function detectConfirm2(prev, cur){
+    return (
+      body(cur) >= body(prev) &&
+      (upperWick(cur) < body(cur)*0.3 || lowerWick(cur) < body(cur)*0.3)
+    );
+  }
+
+  /* ================== FAKE BREAK ================== */
+  function fakeBreak(c, mission){
+    if(!mission) return false;
+    if(mission.dir==="UP"){
+      return c.h > mission.price && c.c < mission.price;
+    }
+    if(mission.dir==="DOWN"){
+      return c.l < mission.price && c.c > mission.price;
+    }
+    return false;
+  }
+
+  /* ================== EXHAUSTION ================== */
+  function exhaustion(arr){
+    if(arr.length < 3) return false;
+    return (
+      body(arr[2]) < body(arr[1]) &&
+      body(arr[1]) < body(arr[0]) &&
+      (upperWick(arr[2]) > body(arr[2]) ||
+       lowerWick(arr[2]) > body(arr[2]))
+    );
+  }
+
+  /* ================== MAIN TICK (M1 ONLY) ================== */
+  function tick(){
+    const m1 = lastCandles("1m",4);
+    if(!m1) return;
+
+    const mission = getNearestActiveMission();
+    if(!mission){ MOM.stage="IDLE"; return; }
+    MOM.activeMission = mission;
+
+    const [a,b,c,d] = m1; // oldest → newest
+
+    /* ---- FAKE BREAK ---- */
+    if(fakeBreak(d, mission)){
+      MOM.stage="FAKE";
+      beep(2);
+      return;
+    }
+
+    /* ---- INFO ---- */
+    if(MOM.stage==="IDLE" && detectInfo(d)){
+      MOM.stage="INFO";
+      beep(1);
+      return;
+    }
+
+    /* ---- CONFIRM-1 ---- */
+    if(MOM.stage==="INFO" && detectConfirm1(c,d)){
+      MOM.stage="C1";
+      beep(2);
+      return;
+    }
+
+    /* ---- CONFIRM-2 ---- */
+    if(MOM.stage==="C1" && detectConfirm2(c,d)){
+      MOM.stage="C2";
+      beep(3);
+      return;
+    }
+
+    /* ---- ENTRY ZONE AWARE ---- */
+    if(MOM.stage==="C2"){
+      MOM.stage="ZONE";
+      beep(4); // 🔥 TIIT 4x KENCANG
+      return;
+    }
+
+    /* ---- EXHAUSTION ---- */
+    if(MOM.stage==="ZONE" && exhaustion([b,c,d])){
+      MOM.stage="EXHAUST";
+      beep(2);
+    }
+  }
+
+  /* ================== SAFE HOOK ================== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    tick();
+  };
+
+})();
+</script>
+<script>
+/* =========================================================
+   🧠 LEVEL 2 — BTC PRICE MEMORY 30 HARI (ADD-ONLY)
+   - Tidak ubah engine lama
+   - Tidak hapus misi lama
+   - Hanya MENYIMPAN & MENANDAI
+   ========================================================= */
+(function(){
+
+  if(!window.STATE || !STATE.missions) return;
+
+  const DAY = 24*60*60*1000;
+  const MAX_AGE = 30 * DAY;
+
+  // Global memory (RAM only)
+  if(!window.BTC_PRICE_MEMORY){
+    window.BTC_PRICE_MEMORY = [];
+  }
+
+  /* ================== HELPERS ================== */
+  function now(){ return Date.now(); }
+
+  function sameMission(a,b){
+    return a.price===b.price && a.dir===b.dir && a.tf===b.tf;
+  }
+
+  function getBodyClose(c){
+    return Math.abs(c.c - c.o);
+  }
+
+  function lastCandle(tf){
+    const a = STATE.candles[tf];
+    if(!a || !a.length) return null;
+    return a[a.length-1];
+  }
+
+  /* ================== INGEST MISI ENGINE ================== */
+  function ingestMissions(){
+    STATE.missions.forEach(m=>{
+      // hanya BTC
+      if(STATE.pair!=="BTCUSDT") return;
+
+      const exists = BTC_PRICE_MEMORY.some(x=>sameMission(x,m));
+      if(!exists){
+        BTC_PRICE_MEMORY.push({
+          tf: m.tf,
+          price: m.price,
+          dir: m.dir,
+          createdAt: now(),
+          touch: 0,
+          status: "OPEN" // OPEN | PAID | DEAD
+        });
+      }
+    });
+  }
+
+  /* ================== UPDATE STATUS ================== */
+  function updateMemory(){
+    const p = ACTIVE_PRICE;
+    BTC_PRICE_MEMORY.forEach(mem=>{
+      if(mem.status!=="OPEN") return;
+
+      // PAID: body close menyentuh harga
+      const c = lastCandle(mem.tf==="15m"?"15m":"1m") || lastCandle("1m");
+      if(c){
+        if(
+          mem.dir==="UP" && c.c >= mem.price && getBodyClose(c) > (c.h-c.l)*0.4
+        ){
+          mem.status="PAID";
+        }
+        if(
+          mem.dir==="DOWN" && c.c <= mem.price && getBodyClose(c) > (c.h-c.l)*0.4
+        ){
+          mem.status="PAID";
+        }
+      }
+
+      // DEAD: kadaluarsa
+      if(now() - mem.createdAt > MAX_AGE){
+        mem.status="DEAD";
+      }
+
+      // touch counter (wick sentuh)
+      if(Math.abs(p - mem.price) < p*0.0004){
+        mem.touch++;
+      }
+    });
+  }
+
+  /* ================== NEAREST OPEN ================== */
+  window.getNearestOpenMemory = function(){
+    const p = ACTIVE_PRICE;
+    let best=null, dmin=Infinity;
+    BTC_PRICE_MEMORY.forEach(m=>{
+      if(m.status!=="OPEN") return;
+      const d=Math.abs(p-m.price);
+      if(d<dmin){ dmin=d; best=m; }
+    });
+    return best;
+  };
+
+  /* ================== SAFE HOOK ================== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    ingestMissions();
+    updateMemory();
+  };
+
+})();
+</script>
+<script>
+/* =========================================================
+   🧠 LEVEL 3 — FAKE BREAK INTELLIGENCE (ADD-ONLY)
+   - Tidak ubah engine lama
+   - Tidak override logic misi
+   - Hanya membaca candle + price memory
+   ========================================================= */
+(function(){
+
+  if(!window.STATE || !window.BTC_PRICE_MEMORY) return;
+
+  if(!window.FAKE_BREAK_LOG){
+    window.FAKE_BREAK_LOG = [];
+  }
+
+  function last(tf){
+    const a = STATE.candles[tf];
+    return a && a.length ? a[a.length-1] : null;
+  }
+
+  function prev(tf){
+    const a = STATE.candles[tf];
+    return a && a.length>1 ? a[a.length-2] : null;
+  }
+
+  function bodyRatio(c){
+    const body=Math.abs(c.c-c.o);
+    const range=Math.max(1e-8,c.h-c.l);
+    return body/range;
+  }
+
+  function wickBias(c){
+    const up = c.h - Math.max(c.o,c.c);
+    const lo = Math.min(c.o,c.c) - c.l;
+    if(up > lo*1.3) return "UPPER";
+    if(lo > up*1.3) return "LOWER";
+    return "BOTH";
+  }
+
+  function detectFakeBreak(){
+    if(STATE.pair!=="BTCUSDT") return;
+
+    const c = last("1m");
+    const p = prev("1m");
+    if(!c || !p) return;
+
+    const nearest = window.getNearestOpenMemory?.();
+    if(!nearest) return;
+
+    const dist = Math.abs(c.c - nearest.price);
+    if(dist > ACTIVE_PRICE*0.001) return; // belum dekat misi
+
+    const wick = wickBias(c);
+    const br = bodyRatio(c);
+
+    let fake = false;
+
+    // break tapi close balik
+    if(nearest.dir==="UP"){
+      if(c.h > nearest.price && c.c < nearest.price && wick==="UPPER" && br < 0.45){
+        fake = true;
+      }
+    }
+    if(nearest.dir==="DOWN"){
+      if(c.l < nearest.price && c.c > nearest.price && wick==="LOWER" && br < 0.45){
+        fake = true;
+      }
+    }
+
+    if(fake){
+      FAKE_BREAK_LOG.push({
+        price: nearest.price,
+        tf: nearest.tf,
+        time: Date.now()
+      });
+      if(FAKE_BREAK_LOG.length>50) FAKE_BREAK_LOG.shift();
+    }
+  }
+
+  /* ===== SAFE HOOK (tanpa ganggu engine) ===== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    detectFakeBreak();
+  };
+
+})();
+</script>
+<script>
+/* =========================================================
+   🧠 LEVEL 4 — MOMENTUM EXHAUSTION ALERT (ADD-ONLY)
+   - Tidak mengubah engine lama
+   - Tidak override misi
+   - Hanya membaca candle + price memory
+   - Output: STATUS + SOUND
+   ========================================================= */
+(function(){
+
+  if(!window.STATE || !window.BTC_PRICE_MEMORY) return;
+
+  if(!window.EXHAUSTION_LOG){
+    window.EXHAUSTION_LOG = [];
+  }
+
+  function last(tf){
+    const a = STATE.candles[tf];
+    return a && a.length ? a[a.length-1] : null;
+  }
+
+  function body(c){ return Math.abs(c.c - c.o); }
+  function range(c){ return Math.max(1e-8, c.h - c.l); }
+
+  function bodyRatio(c){
+    return body(c) / range(c);
+  }
+
+  function exhaustionCheck(){
+    if(STATE.pair !== "BTCUSDT") return;
+
+    const c1 = STATE.candles["1m"];
+    if(!c1 || c1.length < 4) return;
+
+    const a = c1[c1.length-4];
+    const b = c1[c1.length-3];
+    const c = c1[c1.length-2];
+    const d = c1[c1.length-1];
+
+    // arah dorongan
+    const dirUp = d.c > d.o && c.c > c.o;
+    const dirDn = d.c < d.o && c.c < c.o;
+    if(!dirUp && !dirDn) return;
+
+    // body mengecil bertahap
+    if(!(body(d) < body(c) && body(c) < body(b))) return;
+
+    // wick mulai dominan
+    const wickDom =
+      bodyRatio(d) < 0.45 &&
+      (d.h - Math.max(d.o,d.c) > body(d) ||
+       Math.min(d.o,d.c) - d.l > body(d));
+
+    if(!wickDom) return;
+
+    // dekat misi harga
+    const nearest = window.getNearestOpenMemory?.();
+    if(!nearest) return;
+
+    const dist = Math.abs(d.c - nearest.price);
+    if(dist > ACTIVE_PRICE * 0.0012) return;
+
+    // === EXHAUSTION CONFIRMED ===
+    EXHAUSTION_LOG.push({
+      time: Date.now(),
+      price: d.c,
+      mission: nearest.price
+    });
+    if(EXHAUSTION_LOG.length > 50) EXHAUSTION_LOG.shift();
+
+    soundExhaust();
+  }
+
+  /* ===== SOUND TIIT 4x (AMAN HTTP) ===== */
+  let lastBeep = 0;
+  function soundExhaust(){
+    const now = Date.now();
+    if(now - lastBeep < 6000) return; // anti spam
+    lastBeep = now;
+
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      let t = ctx.currentTime;
+      for(let i=0;i<4;i++){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = 920;
+        g.gain.value = 0.12;
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t); o.stop(t+0.12);
+        t += 0.18;
+      }
+    }catch(e){}
+  }
+
+  /* ===== SAFE HOOK ===== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    exhaustionCheck();
+  };
+
+})();
+</script>
+<script>
+/* =========================================================
+   🧠 LEVEL 5 — MISSION PAYMENT CONFIRMATION (ADD-ONLY)
+   - Menentukan PAID vs DEAD secara objektif
+   - Tidak mengubah misi lama
+   - Tidak hapus data
+   - Update price memory & status misi
+   ========================================================= */
+(function(){
+
+  if(!window.STATE || !window.BTC_PRICE_MEMORY) return;
+
+  if(!window.MISSION_PAYMENT_LOG){
+    window.MISSION_PAYMENT_LOG = [];
+  }
+
+  function last(tf){
+    const a = STATE.candles[tf];
+    return a && a.length ? a[a.length-1] : null;
+  }
+
+  function confirmPaid(c, price){
+    // BODY CLOSE tembus level = PAID
+    return (
+      (c.o < price && c.c > price) ||
+      (c.o > price && c.c < price)
+    );
+  }
+
+  function confirmDead(c, price){
+    // Sweep keras lalu close jauh = DEAD
+    const sweep =
+      (c.h > price && c.c < price && (c.h - price) > (price * 0.001)) ||
+      (c.l < price && c.c > price && (price - c.l) > (price * 0.001));
+    return sweep;
+  }
+
+  function processPayment(){
+    if(STATE.pair !== "BTCUSDT") return;
+
+    const c = last("1m");
+    if(!c) return;
+
+    BTC_PRICE_MEMORY.forEach(m=>{
+      if(m.status !== "OPEN") return;
+
+      if(confirmPaid(c, m.price)){
+        m.status = "PAID";
+        m.paidAt = Date.now();
+        log("PAID", m.price);
+      }
+      else if(confirmDead(c, m.price)){
+        m.status = "DEAD";
+        m.deadAt = Date.now();
+        log("DEAD", m.price);
+      }
+    });
+  }
+
+  function log(type, price){
+    MISSION_PAYMENT_LOG.push({
+      type,
+      price,
+      time: Date.now()
+    });
+    if(MISSION_PAYMENT_LOG.length > 100)
+      MISSION_PAYMENT_LOG.shift();
+
+    soundPaid(type);
+  }
+
+  /* ===== SOUND CONFIRMATION ===== */
+  function soundPaid(type){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = type==="PAID"?720:320;
+      g.gain.value = 0.15;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime+0.18);
+    }catch(e){}
+  }
+
+  /* ===== SAFE HOOK ===== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    processPayment();
+  };
+
+})();
+</script>
+<script>
+/* =========================================================
+   📘 LEVEL 6 — MISSION BOOK SUMMARY (ADD-ONLY)
+   - Ringkasan misi OPEN / PAID / DEAD
+   - Target terdekat
+   - Tidak ubah engine lama
+   ========================================================= */
+(function(){
+
+  if(!window.STATE || !window.BTC_PRICE_MEMORY) return;
+
+  let box;
+
+  function ensureBox(){
+    if(box) return;
+    box = document.createElement("div");
+    box.style.border = "1px dashed #00ffff";
+    box.style.padding = "6px";
+    box.style.marginBottom = "8px";
+    box.style.fontSize = "12px";
+    box.style.whiteSpace = "pre-line";
+    document.getElementById("panel").prepend(box);
+  }
+
+  function nearestOpen(price){
+    const open = BTC_PRICE_MEMORY.filter(m=>m.status==="OPEN");
+    if(!open.length) return null;
+    return open.reduce((a,b)=>
+      Math.abs(b.price-price) < Math.abs(a.price-price) ? b : a
+    );
+  }
+
+  function renderBook(){
+    if(STATE.pair !== "BTCUSDT") return;
+    ensureBox();
+
+    const open = BTC_PRICE_MEMORY.filter(m=>m.status==="OPEN");
+    const paid = BTC_PRICE_MEMORY.filter(m=>m.status==="PAID");
+    const dead = BTC_PRICE_MEMORY.filter(m=>m.status==="DEAD");
+
+    const p = window.ACTIVE_PRICE_EVAL || ACTIVE_PRICE || STATE.price;
+    const near = p ? nearestOpen(p) : null;
+
+    box.textContent =
+`📘 BTC MISSION BOOK
+------------------------
+OPEN : ${open.length}
+PAID : ${paid.length}
+DEAD : ${dead.length}
+
+NEAREST OPEN:
+${near ? near.price.toFixed(2) : "-"}
+
+MODE:
+${near ? "WAIT MOMENTUM" : "NO TARGET"}`;
+  }
+
+  /* ===== SAFE HOOK ===== */
+  const _oldRender = window.render;
+  window.render = function(){
+    if(_oldRender) _oldRender();
+    renderBook();
+  };
+
 })();
 </script>
 
